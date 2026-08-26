@@ -42,7 +42,7 @@ HANDLE      = "@bc_hatchery"           # next to the logo in the chin
 CREDIT      = "built by @s.ofile !"    # small print under the handle
 
 CAPTURE_SIZE = (2028, 1520)
-PREVIEW_SIZE = (1012, 760)
+PREVIEW_SIZE = (1024, 768)
 
 # image tuning — this is where booth quality lives
 CONTRAST, GAMMA, UNSHARP = 1.15, 0.85, (2, 150, 3)
@@ -83,17 +83,28 @@ _webcam_last = {"frame": None}
 if CAMERA_ENABLED:
     try:
         from picamera2 import Picamera2
-        from picamera2.encoders import JpegEncoder
-        from picamera2.outputs import FileOutput
 
         stream = StreamOutput()
         cam = Picamera2()
         cam.configure(cam.create_video_configuration(
             main={"size": CAPTURE_SIZE},
-            lores={"size": PREVIEW_SIZE, "format": "YUV420"},
+            lores={"size": PREVIEW_SIZE, "format": "RGB888"},
         ))
-        cam.start_recording(JpegEncoder(q=80), FileOutput(stream), name="lores")
-        time.sleep(1.5)
+        cam.start()
+        time.sleep(1.0)
+
+        # No recording encoder — the Pi 5 has no hardware JPEG, and the
+        # software encoder path can stall. Pump preview frames by hand.
+        def _pi_pump():
+            import numpy as np
+            import simplejpeg
+            while True:
+                arr = np.ascontiguousarray(cam.capture_array("lores"))
+                stream.write(simplejpeg.encode_jpeg(
+                    arr, quality=80, colorspace="BGR"))
+                time.sleep(1 / 24)
+
+        threading.Thread(target=_pi_pump, daemon=True).start()
         CAM_KIND = "picamera"
         # Fixed focus beats autofocus in a booth — AF hunts and misses the
         # moment. Camera Module 3 has an AF motor; lock it at booth distance.
