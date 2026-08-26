@@ -33,7 +33,7 @@ VENDOR_ID   = 0x0483           # from `lsusb` — only used when printing
 PRODUCT_ID  = 0x5743
 
 WIDTH       = 576              # printable dots, 80mm head @ 203dpi
-DITHER      = "floyd"          # "floyd" (fast) | "atkinson" (better, ~3x slower)
+DITHER      = "atkinson"       # "floyd" (fast) | "atkinson" (better, ~3x slower)
 
 BOOTH_NAME  = "HATCHERY BOOTH"
 TAGLINE     = "smile - snap - hatch"
@@ -243,6 +243,8 @@ def process_frame(img, box_w, box_h):
     img = ImageOps.exif_transpose(img).convert("L")
     img = crop_to_aspect(img, box_w / box_h)
     img = img.resize((box_w, box_h), Image.LANCZOS)
+    # sensor noise dithers into speckle — smooth it away before enhancing
+    img = img.filter(ImageFilter.MedianFilter(3))
     img = ImageOps.autocontrast(img, cutoff=2)
     img = ImageEnhance.Contrast(img).enhance(CONTRAST)
     img = img.filter(ImageFilter.UnsharpMask(*UNSHARP))
