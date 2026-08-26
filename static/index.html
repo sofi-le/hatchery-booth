@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Receipt Photobooth</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:none}
+  :root{ --paper:#f6f4ef; --ink:#14130f; }
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--paper);color:var(--ink);
+       font-family:'Courier New',Courier,monospace}
+
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;
+          align-items:center;justify-content:center}
+  .screen.on{display:flex}
+
+  /* live preview, mirrored so people can position themselves */
+  #cam{position:absolute;inset:0;width:100%;height:100%;
+       object-fit:cover;transform:scaleX(-1);z-index:0}
+  body.nocam #cam{display:none}
+  /* with no camera, the dark veil would sit on nothing — lighten it */
+  .veil{position:absolute;inset:0;background:rgba(18,17,14,.5);z-index:1;
+        transition:opacity .15s}
+  body.nocam .veil{background:var(--ink)}
+  .fg{position:relative;z-index:2;text-align:center;color:#fff;width:100%}
+
+  .simbadge{position:absolute;top:1.4vmin;left:0;right:0;z-index:6;
+            text-align:center;font-size:1.9vmin;letter-spacing:.2em;
+            color:#fff;opacity:.4}
+  body:not(.nocam) .simbadge{display:none}
+
+  /* ---- attract ---- */
+  #attract .title{font-size:7vmin;font-weight:700;letter-spacing:.2em;line-height:1.35}
+  #attract .rule{width:40%;height:2px;background:#fff;margin:3vmin auto;opacity:.75}
+  #attract .sub{font-size:3vmin;letter-spacing:.14em;opacity:.9}
+  #attract .tap{font-size:4.5vmin;letter-spacing:.3em;margin-top:6vmin;
+                animation:pulse 2.1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+  /* ---- mode picker ---- */
+  #pick{background:var(--paper)}
+  #pick h2{font-size:4vmin;letter-spacing:.2em;margin-bottom:5vmin}
+  .cards{display:flex;gap:5vmin}
+  .card{border:3px solid var(--ink);background:#fff;padding:5vmin 6vmin;
+        display:flex;flex-direction:column;align-items:center;gap:2.5vmin}
+  .card:active{background:var(--ink);color:var(--paper)}
+  .card .name{font-size:4.5vmin;font-weight:700;letter-spacing:.14em}
+  .card .desc{font-size:2.6vmin;opacity:.65;letter-spacing:.06em}
+  .glyph{display:flex;flex-direction:column;gap:4px}
+  .glyph i{display:block;width:11vmin;background:currentColor;opacity:.85}
+  .glyph.s3 i{height:4.5vmin}
+  .glyph.s1 i{height:15vmin}
+
+  /* ---- session ---- */
+  #shoot .count{font-size:30vmin;font-weight:700;line-height:1}
+  #shoot .cue{font-size:4.5vmin;letter-spacing:.3em;margin-top:1vmin}
+  #shoot .pips{position:absolute;bottom:6vmin;left:0;right:0;z-index:3;
+               display:flex;gap:14px;justify-content:center}
+  #shoot .pips b{width:16px;height:16px;border-radius:50%;
+                 border:2px solid #fff;opacity:.5}
+  #shoot .pips b.done{background:#fff;opacity:1}
+  .flash{position:absolute;inset:0;background:#fff;opacity:0;z-index:5;
+         pointer-events:none}
+  .flash.go{animation:pop .45s ease-out}
+  @keyframes pop{0%{opacity:.95}100%{opacity:0}}
+
+  /* ---- receipt ---- */
+  #done{background:var(--paper);justify-content:flex-start;padding:2.5vmin 0}
+  #done .hdr{font-size:3.4vmin;letter-spacing:.26em;margin-bottom:1.5vmin}
+  #done .mock{font-size:2.2vmin;letter-spacing:.12em;opacity:.5;margin-bottom:1.5vmin}
+  .paper{width:46%;max-height:70vh;overflow:hidden;background:#fff;
+         box-shadow:0 8px 28px rgba(0,0,0,.18)}
+  .paper img{width:100%;display:block;image-rendering:pixelated}
+  #done .again{margin-top:2.5vmin;font-size:2.8vmin;letter-spacing:.24em;opacity:.55}
+</style>
+</head>
+<body>
+
+<img id="cam" src="/stream.mjpg" alt="">
+<div class="flash" id="flash"></div>
+<div class="simbadge">SIMULATED CAMERA</div>
+
+<div class="screen on" id="attract">
+  <div class="veil"></div>
+  <div class="fg">
+    <div class="title">THE RECEIPT<br>PHOTOBOOTH</div>
+    <div class="rule"></div>
+    <div class="sub">THE BEST MOMENTS DESERVE A RECEIPT</div>
+    <div class="tap">TOUCH TO START</div>
+  </div>
+</div>
+
+<div class="screen" id="pick">
+  <h2>CHOOSE YOUR RECEIPT</h2>
+  <div class="cards">
+    <div class="card" data-mode="strip">
+      <div class="glyph s3"><i></i><i></i><i></i></div>
+      <div class="name">STRIP</div>
+      <div class="desc">3 PHOTOS</div>
+    </div>
+    <div class="card" data-mode="single">
+      <div class="glyph s1"><i></i></div>
+      <div class="name">SINGLE</div>
+      <div class="desc">1 PHOTO</div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="shoot">
+  <div class="veil" id="shootVeil"></div>
+  <div class="fg">
+    <div class="count" id="count"></div>
+    <div class="cue" id="cue"></div>
+  </div>
+  <div class="pips" id="pips"></div>
+</div>
+
+<div class="screen" id="done">
+  <div class="hdr" id="doneHdr">TAKE YOUR RECEIPT</div>
+  <div class="mock" id="doneMock"></div>
+  <div class="paper"><img id="receipt" alt=""></div>
+  <div class="again">TOUCH TO GO AGAIN</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const show = id => document.querySelectorAll('.screen')
+                     .forEach(s => s.classList.toggle('on', s.id === id));
+const post = (url, body) => fetch(url, {
+  method:'POST', headers:{'Content-Type':'application/json'},
+  body: JSON.stringify(body || {})
+}).then(r => r.json());
+
+let CFG = {strip_shots: 3, mock: true, camera: false};
+let busy = false;
+
+fetch('/config').then(r => r.json()).then(c => {
+  CFG = c;
+  document.body.classList.toggle('nocam', !c.camera);
+}).catch(() => document.body.classList.add('nocam'));
+
+function pips(n, done){
+  $('pips').innerHTML = Array.from({length:n},
+    (_, i) => `<b class="${i < done ? 'done' : ''}"></b>`).join('');
+}
+
+async function session(mode){
+  const n = mode === 'strip' ? CFG.strip_shots : 1;
+  await post('/reset');
+  show('shoot');
+  pips(n, 0);
+
+  for (let i = 0; i < n; i++){
+    if (n > 1){ $('cue').textContent = `PHOTO ${i+1} OF ${n}`; await sleep(900); }
+    for (let k = 3; k > 0; k--){
+      $('count').textContent = k;
+      $('cue').textContent = k === 3 ? 'GET READY' : '';
+      await sleep(1000);
+    }
+    $('count').textContent = ''; $('cue').textContent = '';
+    if (CFG.camera) $('shootVeil').style.opacity = 0;
+    await sleep(120);
+
+    const r = await post('/capture');
+    $('flash').classList.add('go');
+    setTimeout(() => $('flash').classList.remove('go'), 460);
+    if (!r.ok){ $('cue').textContent = 'CAMERA ERROR'; await sleep(3000); break; }
+
+    pips(n, i + 1);
+    $('shootVeil').style.opacity = 1;
+    if (i < n - 1) await sleep(1400);      // beat between shots — tune this
+  }
+
+  $('count').textContent = '';
+  $('cue').textContent = CFG.mock ? 'RENDERING' : 'PRINTING';
+
+  try{
+    const j = await post('/print', { mode });
+    if (!j.ok) throw new Error(j.error || 'print failed');
+    $('receipt').src = j.receipt + '?t=' + Date.now();
+    $('doneHdr').textContent = j.mock ? 'SIMULATED RECEIPT' : 'TAKE YOUR RECEIPT';
+    $('doneMock').textContent = j.mock
+      ? `mock mode — no paper — rendered in ${j.seconds}s`
+      : `printed in ${j.seconds}s`;
+    show('done');
+    await sleep(j.mock ? 12000 : 8000);
+  }catch(e){
+    $('cue').textContent = 'SOMETHING WENT WRONG';
+    await sleep(3500);
+  }
+
+  show('attract');
+  busy = false;
+}
+
+document.addEventListener('click', ev => {
+  if (busy) return;
+
+  const card = ev.target.closest('.card');
+  if (card && $('pick').classList.contains('on')){
+    busy = true;
+    session(card.dataset.mode);
+    return;
+  }
+  if ($('attract').classList.contains('on')){ show('pick'); return; }
+  if ($('done').classList.contains('on')){ show('attract'); return; }
+});
+</script>
+</body>
+</html>

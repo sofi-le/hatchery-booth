@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""
+Photobooth — Pi 5 + touchscreen. Camera and printer are independent toggles.
+
+    CAMERA_ENABLED  = False -> uses images from ./samples/ (or a test pattern)
+    PRINTER_ENABLED = False -> renders the receipt to PNG, shows it on screen
+
+Right now: both False. Flip PRINTER_ENABLED when the printer arrives, then
+CAMERA_ENABLED when the Pi 5 camera cable arrives. Nothing else changes.
+
+Setup:
+    sudo apt install -y chromium-browser
+    python3 -m venv ~/booth/venv --system-site-packages
+    source ~/booth/venv/bin/activate
+    pip install flask pillow qrcode
+    # when the printer arrives:  pip install python-escpos
+    # when the camera arrives:   sudo apt install -y python3-picamera2
+
+Run:
+    cd ~/booth && source venv/bin/activate && python booth.py
+    chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:8000
+"""
+
+import io, os, glob, random, threading, time, uuid, datetime, traceback
+from flask import Flask, request, jsonify, send_from_directory, Response
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw, ImageFont
+import qrcode
+
+# ============================ CONFIG ============================
+CAMERA_ENABLED  = False        # True once the Pi 5 camera cable arrives
+PRINTER_ENABLED = False        # True once the thermal printer arrives
+
+VENDOR_ID   = 0x0483           # from `lsusb` — only used when printing
+PRODUCT_ID  = 0x5743
+
+WIDTH       = 576              # printable dots, 80mm head @ 203dpi
+DITHER      = "floyd"          # "floyd" (fast) | "atkinson" (better, ~3x slower)
+
+BOOTH_NAME  = "THE RECEIPT PHOTOBOOTH"
+TAGLINE     = "The Best Moments Deserve a Receipt"
+GALLERY_URL = "https://your-gallery-link.com"
+
+CAPTURE_SIZE = (2028, 1520)
+PREVIEW_SIZE = (1012, 760)
+
+# image tuning — this is where booth quality lives
+CONTRAST, GAMMA, UNSHARP = 1.15, 0.85, (2, 150, 3)
+
+# layout
+MARGIN, GAP = 20, 16
+FRAME_W     = WIDTH - 2 * MARGIN
+STRIP_SHOTS = 3
+STRIP_FRAME_H, SINGLE_FRAME_H = 402, 670
+# ================================================================
+
+app = Flask(__name__, static_folder="static", static_url_path="")
+RECEIPT_DIR = os.path.join("static", "receipts")
+SAMPLE_DIR  = "samples"
+os.makedirs(RECEIPT_DIR, exist_ok=True)
+os.makedirs(SAMPLE_DIR, exist_ok=True)
+
+session_shots = []
+cam = None
+stream = None
+
+
+# ------------------------------------------------------------ camera
+class StreamOutput(io.BufferedIOBase):
+    def __init__(self):
+        self.frame = None
+        self.cond = threading.Condition()
+
+    def write(self, buf):
+        with self.cond:
+            self.frame = buf
+            self.cond.notify_all()
+
+
+if CAMERA_ENABLED:
+    from picamera2 import Picamera2
+    from picamera2.encoders import JpegEncoder
+    from picamera2.outputs import FileOutput
+
+    stream = StreamOutput()
+    cam = Picamera2()
+    cam.configure(cam.create_video_configuration(
+        main={"size": CAPTURE_SIZE},
+        lores={"size": PREVIEW_SIZE, "format": "YUV420"},
+    ))
+    cam.start_recording(JpegEncoder(q=80), FileOutput(stream), name="lores")
+    time.sleep(1.5)
+    # Fixed focus beats autofocus in a booth — AF hunts and misses the moment.
+    # from libcamera import controls
+    # cam.set_controls({"AfMode": controls.AfModeEnum.Manual,
+    #                   "LensPosition": 1/1.2})     # 1.2 metres
+
+
+def test_pattern(n):
+    """Stand-in 'photo' when there's no camera and no sample images."""
+    img = Image.new("L", CAPTURE_SIZE, 235)
+    d = ImageDraw.Draw(img)
+    for i in range(0, CAPTURE_SIZE[0], 90):
+        d.rectangle([i, 0, i + 90, CAPTURE_SIZE[1]],
+                    fill=int(255 * (i / CAPTURE_SIZE[0])))
+    d.ellipse([700, 380, 1330, 1140], fill=90)
+    try:
+        f = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 200)
+    except OSError:
+        f = ImageFont.load_default()
+    d.text((940, 660), str(n), font=f, fill=245)
+    return img.convert("RGB")
+
+
+def grab_frame():
+    """One 'capture' — real camera, a sample image, or a test pattern."""
+    if CAMERA_ENABLED:
+        return cam.capture_image("main")
+
+    samples = sorted(glob.glob(os.path.join(SAMPLE_DIR, "*.jpg"))
+                     + glob.glob(os.path.join(SAMPLE_DIR, "*.jpeg"))
+                     + glob.glob(os.path.join(SAMPLE_DIR, "*.png")))
+    if samples:
+        return Image.open(random.choice(samples))
+    return test_pattern(len(session_shots) + 1)
+
+
+def mjpeg():
+    while True:
+        with stream.cond:
+            stream.cond.wait()
+            frame = stream.frame
+        yield (b"--FRAME\r\nContent-Type: image/jpeg\r\n"
+               b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+               + frame + b"\r\n")
+
+
+# ------------------------------------------------------------ fonts
+def _font(size, bold=True):
+    base = "/usr/share/fonts/truetype/dejavu/"
+    name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+    for p in [base + name,
+              "/System/Library/Fonts/Supplemental/Courier New Bold.ttf"]:
+        try:
+            return ImageFont.truetype(p, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def centered(draw, y, text, font):
+    box = draw.textbbox((0, 0), text, font=font)
+    draw.text(((WIDTH - box[2]) // 2, y), text, font=font, fill=0)
+    return y + box[3]
+
+
+# ------------------------------------------------------------ imaging
+def atkinson(img):
+    """Cleaner whites/blacks than Floyd-Steinberg, but pure Python."""
+    img = img.convert("L")
+    px = img.load()
+    w, h = img.size
+    for y in range(h):
+        for x in range(w):
+            old = px[x, y]
+            new = 255 if old > 127 else 0
+            px[x, y] = new
+            err = (old - new) // 8
+            for dx, dy in ((1, 0), (2, 0), (-1, 1), (0, 1), (1, 1), (0, 2)):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h:
+                    px[nx, ny] = max(0, min(255, px[nx, ny] + err))
+    return img.convert("1")
+
+
+def crop_to_aspect(img, target):
+    w, h = img.size
+    if w / h > target:
+        nw = int(h * target)
+        return img.crop(((w - nw) // 2, 0, (w + nw) // 2, h))
+    nh = int(w / target)
+    return img.crop((0, (h - nh) // 2, w, (h + nh) // 2))
+
+
+def process_frame(img, box_w, box_h):
+    img = ImageOps.exif_transpose(img).convert("L")
+    img = crop_to_aspect(img, box_w / box_h)
+    img = img.resize((box_w, box_h), Image.LANCZOS)
+    img = ImageOps.autocontrast(img, cutoff=2)
+    img = ImageEnhance.Contrast(img).enhance(CONTRAST)
+    img = img.filter(ImageFilter.UnsharpMask(*UNSHARP))
+    img = img.point(lambda p: int(255 * (p / 255) ** GAMMA))
+    return atkinson(img) if DITHER == "atkinson" else img.convert("1")
+
+
+def compose_receipt(shots, mode):
+    """Header, frames, footer, QR — one 1-bit bitmap. Mock render and real
+    print are then the identical code path."""
+    frame_h = STRIP_FRAME_H if mode == "strip" else SINGLE_FRAME_H
+    n = len(shots)
+    f_title, f_sub = _font(34), _font(19, bold=False)
+    f_body, f_small = _font(20, bold=False), _font(17, bold=False)
+
+    header_h, footer_h = 110, 300
+    total_h = MARGIN + header_h + n * frame_h + GAP * (n - 1) + footer_h + MARGIN
+
+    canvas = Image.new("1", (WIDTH, total_h), 1)
+    d = ImageDraw.Draw(canvas)
+
+    y = MARGIN
+    y = centered(d, y, BOOTH_NAME, f_title) + 8
+    y = centered(d, y, TAGLINE, f_sub) + 14
+    d.line([(MARGIN, y), (WIDTH - MARGIN, y)], fill=0, width=2)
+
+    y = MARGIN + header_h
+    for shot in shots:
+        canvas.paste(process_frame(shot, FRAME_W, frame_h), (MARGIN, y))
+        y += frame_h + GAP
+    y -= GAP
+
+    y += 18
+    d.line([(MARGIN, y), (WIDTH - MARGIN, y)], fill=0, width=2)
+    y += 14
+    y = centered(d, y, datetime.datetime.now().strftime("%m/%d/%Y   %I:%M %p"),
+                 f_body) + 6
+    y = centered(d, y, f"QTY {n}          NO REFUNDS", f_body) + 18
+
+    qr = qrcode.QRCode(box_size=4, border=1)
+    qr.add_data(GALLERY_URL)
+    qr.make(fit=True)
+    qi = qr.make_image(fill_color="black", back_color="white").convert("1")
+    canvas.paste(qi, ((WIDTH - qi.width) // 2, y))
+    centered(d, y + qi.height + 8, "scan for the digital copy", f_small)
+
+    return canvas
+
+
+def emit(bitmap):
+    rid = uuid.uuid4().hex[:12]
+    bitmap.save(os.path.join(RECEIPT_DIR, f"{rid}.png"))
+    if PRINTER_ENABLED:
+        from escpos.printer import Usb
+        p = Usb(VENDOR_ID, PRODUCT_ID)
+        p.image(bitmap, impl="bitImageRaster")
+        p.text("\n\n")
+        p.cut(mode="PART")      # leaves a tab so the receipt hangs in the slot
+        p.close()
+    return rid
+
+
+# ------------------------------------------------------------ routes
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
+
+
+@app.route("/stream.mjpg")
+def stream_route():
+    if not CAMERA_ENABLED:
+        return ("", 204)
+    return Response(mjpeg(),
+                    mimetype="multipart/x-mixed-replace; boundary=FRAME")
+
+
+@app.route("/config")
+def config():
+    return jsonify(strip_shots=STRIP_SHOTS,
+                   mock=not PRINTER_ENABLED,
+                   camera=CAMERA_ENABLED)
+
+
+@app.route("/reset", methods=["POST"])
+def reset():
+    session_shots.clear()
+    return jsonify(ok=True)
+
+
+@app.route("/capture", methods=["POST"])
+def capture():
+    try:
+        session_shots.append(grab_frame())
+        return jsonify(ok=True, count=len(session_shots))
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route("/print", methods=["POST"])
+def do_print():
+    t0 = time.time()
+    try:
+        mode = request.json.get("mode", "single")
+        if not session_shots:
+            return jsonify(ok=False, error="no shots"), 400
+        rid = emit(compose_receipt(list(session_shots), mode))
+        session_shots.clear()
+        dt = round(time.time() - t0, 1)
+        print(f"[{mode}] -> {rid} in {dt}s")
+        return jsonify(ok=True, receipt=f"/receipts/{rid}.png",
+                       mock=not PRINTER_ENABLED, seconds=dt)
+    except Exception as e:
+        traceback.print_exc()
+        session_shots.clear()
+        return jsonify(ok=False, error=str(e)), 500
+
+
+if __name__ == "__main__":
+    print("Booth |",
+          "camera:", "LIVE" if CAMERA_ENABLED else "SIMULATED",
+          "| printer:", "REAL" if PRINTER_ENABLED else "MOCK",
+          "| dither:", DITHER)
+    if not CAMERA_ENABLED:
+        n = len(glob.glob(os.path.join(SAMPLE_DIR, "*.jpg")) +
+                glob.glob(os.path.join(SAMPLE_DIR, "*.jpeg")) +
+                glob.glob(os.path.join(SAMPLE_DIR, "*.png")))
+        print(f"       drop photos in ./{SAMPLE_DIR}/ to use as fake "
+              f"captures (found {n})")
+    app.run(host="127.0.0.1", port=8000, threaded=True)
