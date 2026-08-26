@@ -3,125 +3,187 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Receipt Photobooth</title>
+<title>Hatchery Booth</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;
     touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:none}
-  :root{ --paper:#f6f4ef; --ink:#14130f; }
+  :root{
+    --cream:#fdf8f2;        /* warm white */
+    --maroon:#7d3b4a;       /* soft BC maroon */
+    --maroon-deep:#5e2a37;
+    --bc-red:#c22b33;       /* badge red */
+    --butter:#edc969;       /* BC gold */
+    --butter-soft:#f7e6ae;
+    --blush:#f3e2e0;        /* maroon-tinted pastel for surfaces */
+    --taupe:#8f857d;        /* warm gray for "tap to start" */
+  }
+  @font-face{font-family:'Titan One';
+             src:url('/fonts/TitanOne.ttf') format('truetype')}
+  :root{--display:'Titan One',ui-rounded,'Arial Rounded MT Bold',sans-serif}
   html,body{height:100%;overflow:hidden}
-  body{background:var(--paper);color:var(--ink);
-       font-family:'Courier New',Courier,monospace}
+  body{background:var(--cream);color:var(--maroon);
+       font-family:ui-rounded,'SF Pro Rounded','Hiragino Maru Gothic ProN',
+                   'Arial Rounded MT Bold','Varela Round','Quicksand',sans-serif}
 
   .screen{position:absolute;inset:0;display:none;flex-direction:column;
           align-items:center;justify-content:center}
   .screen.on{display:flex}
 
-  /* live preview, mirrored so people can position themselves */
-  #cam{position:absolute;inset:0;width:100%;height:100%;
-       object-fit:cover;transform:scaleX(-1);z-index:0}
-  body.nocam #cam{display:none}
-  /* with no camera, the dark veil would sit on nothing — lighten it */
-  .veil{position:absolute;inset:0;background:rgba(18,17,14,.5);z-index:1;
-        transition:opacity .15s}
-  body.nocam .veil{background:var(--ink)}
   .fg{position:relative;z-index:2;text-align:center;color:#fff;width:100%}
 
-  .simbadge{position:absolute;top:1.4vmin;left:0;right:0;z-index:6;
-            text-align:center;font-size:1.9vmin;letter-spacing:.2em;
-            color:#fff;opacity:.4}
+  .simbadge{position:absolute;top:1.6vmin;left:0;right:0;z-index:6;
+            text-align:center;font-size:1.8vmin;letter-spacing:.18em;
+            color:var(--maroon);opacity:.35}
   body:not(.nocam) .simbadge{display:none}
 
   /* ---- attract ---- */
-  #attract .title{font-size:7vmin;font-weight:700;letter-spacing:.2em;line-height:1.35}
-  #attract .rule{width:40%;height:2px;background:#fff;margin:3vmin auto;opacity:.75}
-  #attract .sub{font-size:3vmin;letter-spacing:.14em;opacity:.9}
-  #attract .tap{font-size:4.5vmin;letter-spacing:.3em;margin-top:6vmin;
-                animation:pulse 2.1s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+  #attract{background:var(--butter);justify-content:flex-start}
+  #attract .fg{color:#fff;padding-top:7vh}
+  #attract .badge{display:inline-block;background:#fff;color:var(--bc-red);
+                  border-radius:999px;padding:1.2vmin 3.4vmin;
+                  font-size:2.8vmin;font-weight:800;letter-spacing:.18em;
+                  margin-bottom:4.5vmin}
+  #attract .title{font-family:var(--display);font-size:13vmin;font-weight:400;
+                  letter-spacing:.01em;line-height:1.06;text-transform:uppercase}
+  #attract .dome{position:absolute;bottom:-16vh;left:50%;
+                 transform:translateX(-50%);width:150vw;height:46vh;
+                 background:#fff;border-radius:50% 50% 0 0;z-index:2;
+                 display:flex;align-items:flex-start;justify-content:center;
+                 padding-top:7vh}
+  #attract .tap{font-family:var(--display);color:var(--taupe);font-size:5vmin;
+                font-weight:400;letter-spacing:.04em;text-transform:uppercase;
+                animation:pulse 2.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
 
   /* ---- mode picker ---- */
-  #pick{background:var(--paper)}
-  #pick h2{font-size:4vmin;letter-spacing:.2em;margin-bottom:5vmin}
+  #pick{background:var(--cream)}
+  #pick h2{font-family:var(--display);font-size:4.4vmin;font-weight:400;
+           letter-spacing:.06em;text-transform:uppercase;margin-bottom:5vmin}
   .cards{display:flex;gap:5vmin}
-  .card{border:3px solid var(--ink);background:#fff;padding:5vmin 6vmin;
-        display:flex;flex-direction:column;align-items:center;gap:2.5vmin}
-  .card:active{background:var(--ink);color:var(--paper)}
-  .card .name{font-size:4.5vmin;font-weight:700;letter-spacing:.14em}
-  .card .desc{font-size:2.6vmin;opacity:.65;letter-spacing:.06em}
-  .glyph{display:flex;flex-direction:column;gap:4px}
-  .glyph i{display:block;width:11vmin;background:currentColor;opacity:.85}
-  .glyph.s3 i{height:4.5vmin}
-  .glyph.s1 i{height:15vmin}
+  .card{background:#fff;border:3px solid var(--blush);border-radius:3vmin;
+        padding:5vmin 6vmin;display:flex;flex-direction:column;align-items:center;
+        gap:2.5vmin;box-shadow:0 10px 24px rgba(125,59,74,.10)}
+  .card:active{background:var(--butter-soft);border-color:var(--butter)}
+  .card .name{font-family:var(--display);font-size:4.2vmin;font-weight:400;
+              letter-spacing:.06em;text-transform:uppercase}
+  .card .desc{font-size:2.5vmin;opacity:.55;letter-spacing:.06em}
+  .glyph{display:flex;flex-direction:column;gap:6px}
+  .glyph i{display:block;width:11vmin;background:var(--butter);
+           border:2px solid var(--maroon);border-radius:1vmin}
+  .glyph.s3 i{height:4.2vmin}
+  .glyph.s1 i{height:14.6vmin}
 
   /* ---- session ---- */
-  #shoot .count{font-size:30vmin;font-weight:700;line-height:1}
-  #shoot .cue{font-size:4.5vmin;letter-spacing:.3em;margin-top:1vmin}
-  #shoot .pips{position:absolute;bottom:6vmin;left:0;right:0;z-index:3;
-               display:flex;gap:14px;justify-content:center}
-  #shoot .pips b{width:16px;height:16px;border-radius:50%;
-                 border:2px solid #fff;opacity:.5}
-  #shoot .pips b.done{background:#fff;opacity:1}
+  #shoot{background:var(--butter-soft);gap:2.4vmin}
+  /* live preview cropped to the exact print aspect, in a polaroid frame */
+  .pframe{background:#fff;padding:1.6vmin;border-radius:2vmin;
+          box-shadow:0 14px 36px rgba(125,59,74,.2)}
+  .pframe img{display:block;object-fit:cover;transform:scaleX(-1);
+              border-radius:1.2vmin}
+  .pframe.single img{width:min(70vw,42vh);aspect-ratio:4/5}
+  .pframe.strip  img{width:min(80vw,64vh);aspect-ratio:4/3}
+  body.nocam .pframe img{visibility:hidden}
+  #shoot .cue{font-family:var(--display);font-size:3.6vmin;color:var(--maroon);
+              letter-spacing:.1em;text-transform:uppercase;min-height:4.6vmin}
+  #shoot .count{font-family:var(--display);font-size:13vmin;line-height:1;
+                color:var(--maroon);min-height:13vmin}
+  #shoot .count.pop{animation:countpop .5s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes countpop{0%{transform:scale(.3);opacity:0}
+                      100%{transform:scale(1);opacity:1}}
+  #shoot .pips{position:absolute;bottom:5vmin;left:0;right:0;
+               display:flex;gap:16px;justify-content:center}
+  #shoot .pips b{width:2.4vmin;height:2.4vmin;border-radius:50%;
+                 border:2px solid var(--maroon);opacity:.35}
+  #shoot .pips b.done{background:var(--maroon);opacity:1}
   .flash{position:absolute;inset:0;background:#fff;opacity:0;z-index:5;
          pointer-events:none}
   .flash.go{animation:pop .45s ease-out}
   @keyframes pop{0%{opacity:.95}100%{opacity:0}}
 
-  /* ---- receipt ---- */
-  #done{background:var(--paper);justify-content:flex-start;padding:2.5vmin 0}
-  #done .hdr{font-size:3.4vmin;letter-spacing:.26em;margin-bottom:1.5vmin}
-  #done .mock{font-size:2.2vmin;letter-spacing:.12em;opacity:.5;margin-bottom:1.5vmin}
-  .paper{width:46%;max-height:70vh;overflow:hidden;background:#fff;
-         box-shadow:0 8px 28px rgba(0,0,0,.18)}
-  .paper img{width:100%;display:block;image-rendering:pixelated}
-  #done .again{margin-top:2.5vmin;font-size:2.8vmin;letter-spacing:.24em;opacity:.55}
+  /* ---- review (keep or retake) ---- */
+  #review{background:var(--butter-soft);gap:3.5vmin}
+  #review .rlogo{width:11vmin;border-radius:2.4vmin;
+                 box-shadow:0 6px 18px rgba(125,59,74,.18)}
+  .polaroid{background:#fff;padding:1.8vmin 1.8vmin 0;border-radius:.9vmin;
+            transform:rotate(-1.5deg);
+            box-shadow:0 14px 36px rgba(125,59,74,.22)}
+  .polaroid img{display:block;object-fit:cover}
+  .polaroid.single img{width:min(70vw,42vh);aspect-ratio:4/5}
+  .polaroid.strip  img{width:min(80vw,56vh);aspect-ratio:4/3}
+  .polaroid .pcap{font-family:var(--display);color:var(--maroon);
+                  text-align:center;font-size:3.8vmin;letter-spacing:.06em;
+                  text-transform:uppercase;padding:2.2vmin 0 2.6vmin}
+  .rbtns{display:flex;gap:4vmin}
+  .btn{font-family:var(--display);font-size:3.4vmin;letter-spacing:.06em;
+       text-transform:uppercase;border-radius:999px;padding:2vmin 6vmin}
+  .btn.ghost{color:var(--maroon);border:3px solid var(--maroon)}
+  .btn.ghost:active{background:var(--blush)}
+  .btn.solid{background:var(--maroon);color:#fff;
+             border:3px solid var(--maroon)}
+  .btn.solid:active{background:var(--maroon-deep)}
+
+  /* ---- photos ready ---- */
+  #done{background:var(--butter-soft);gap:2.6vmin}
+  #done .hdr{font-family:var(--display);font-size:4vmin;font-weight:400;
+             letter-spacing:.06em;text-transform:uppercase}
+  .paper{background:#fff;border-radius:2vmin;padding:1.2vmin;
+         box-shadow:0 12px 32px rgba(125,59,74,.18)}
+  .paper img{max-height:74vh;max-width:84vw;display:block;
+             border-radius:1vmin;image-rendering:pixelated}
 </style>
 </head>
 <body>
 
-<img id="cam" src="/stream.mjpg" alt="">
 <div class="flash" id="flash"></div>
 <div class="simbadge">SIMULATED CAMERA</div>
 
 <div class="screen on" id="attract">
-  <div class="veil"></div>
   <div class="fg">
-    <div class="title">THE RECEIPT<br>PHOTOBOOTH</div>
-    <div class="rule"></div>
-    <div class="sub">THE BEST MOMENTS DESERVE A RECEIPT</div>
-    <div class="tap">TOUCH TO START</div>
+    <div class="badge">@BC_HATCHERY</div>
+    <div class="title">Hatchery<br>Booth</div>
   </div>
+  <div class="dome"><div class="tap">tap to start</div></div>
 </div>
 
 <div class="screen" id="pick">
-  <h2>CHOOSE YOUR RECEIPT</h2>
+  <h2>pick your style</h2>
   <div class="cards">
     <div class="card" data-mode="strip">
       <div class="glyph s3"><i></i><i></i><i></i></div>
-      <div class="name">STRIP</div>
-      <div class="desc">3 PHOTOS</div>
+      <div class="name">strip</div>
+      <div class="desc">3 photos</div>
     </div>
     <div class="card" data-mode="single">
       <div class="glyph s1"><i></i></div>
-      <div class="name">SINGLE</div>
-      <div class="desc">1 PHOTO</div>
+      <div class="name">single</div>
+      <div class="desc">1 photo</div>
     </div>
   </div>
 </div>
 
 <div class="screen" id="shoot">
-  <div class="veil" id="shootVeil"></div>
-  <div class="fg">
-    <div class="count" id="count"></div>
-    <div class="cue" id="cue"></div>
-  </div>
+  <div class="pframe" id="pframe"><img id="cam" src="/stream.mjpg" alt=""></div>
+  <div class="cue" id="cue"></div>
+  <div class="count" id="count"></div>
   <div class="pips" id="pips"></div>
 </div>
 
+<div class="screen" id="review">
+  <img class="rlogo" src="/hatchery_logo.png" alt="">
+  <div class="polaroid">
+    <img id="lastShot" alt="">
+    <div class="pcap">love it?</div>
+  </div>
+  <div class="rbtns">
+    <div class="btn ghost" id="retakeBtn">retake</div>
+    <div class="btn solid" id="keepBtn">keep it!</div>
+  </div>
+</div>
+
 <div class="screen" id="done">
-  <div class="hdr" id="doneHdr">TAKE YOUR RECEIPT</div>
-  <div class="mock" id="doneMock"></div>
+  <div class="hdr">hatchery booth</div>
   <div class="paper"><img id="receipt" alt=""></div>
-  <div class="again">TOUCH TO GO AGAIN</div>
+  <div class="btn solid" id="returnBtn">return</div>
 </div>
 
 <script>
@@ -136,65 +198,102 @@ const post = (url, body) => fetch(url, {
 
 let CFG = {strip_shots: 3, mock: true, camera: false};
 let busy = false;
+let reviewChoice = null;
+let returnHome = null;
 
 fetch('/config').then(r => r.json()).then(c => {
   CFG = c;
   document.body.classList.toggle('nocam', !c.camera);
 }).catch(() => document.body.classList.add('nocam'));
 
+// dev helper: /?screen=review jumps straight to a screen for styling
+const dbgScreen = new URLSearchParams(location.search).get('screen');
+if (dbgScreen){
+  if (dbgScreen === 'review'){
+    $('lastShot').src = '/last.jpg';
+    document.querySelector('.polaroid').classList.add(
+      new URLSearchParams(location.search).get('mode') || 'single');
+  }
+  if (dbgScreen === 'done') $('receipt').src = '/receipts/bc522081c1e6.png';
+  if (dbgScreen === 'shoot'){
+    $('pframe').classList.add(
+      new URLSearchParams(location.search).get('mode') || 'single');
+    setCount(2); $('cue').textContent = 'get ready!'; pips(3, 1);
+  }
+  show(dbgScreen);
+}
+
 function pips(n, done){
   $('pips').innerHTML = Array.from({length:n},
     (_, i) => `<b class="${i < done ? 'done' : ''}"></b>`).join('');
 }
 
+function setCount(t){
+  const c = $('count');
+  c.textContent = t;
+  if (t !== ''){ c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); }
+}
+
 async function session(mode){
   const n = mode === 'strip' ? CFG.strip_shots : 1;
   await post('/reset');
+  const aspect = mode === 'strip' ? 'strip' : 'single';
+  $('pframe').className = 'pframe ' + aspect;
+  document.querySelector('.polaroid').className = 'polaroid ' + aspect;
   show('shoot');
   pips(n, 0);
 
-  for (let i = 0; i < n; i++){
-    if (n > 1){ $('cue').textContent = `PHOTO ${i+1} OF ${n}`; await sleep(900); }
-    for (let k = 3; k > 0; k--){
-      $('count').textContent = k;
-      $('cue').textContent = k === 3 ? 'GET READY' : '';
-      await sleep(1000);
-    }
-    $('count').textContent = ''; $('cue').textContent = '';
-    if (CFG.camera) $('shootVeil').style.opacity = 0;
-    await sleep(120);
+  shots: for (let i = 0; i < n; i++){
+    while (true){
+      if (n > 1){ $('cue').textContent = `photo ${i+1} of ${n}`; await sleep(900); }
+      for (let k = 3; k > 0; k--){
+        setCount(k);
+        $('cue').textContent = k === 3 ? 'get ready!' : '';
+        await sleep(1000);
+      }
+      setCount(''); $('cue').textContent = '';
+      await sleep(120);
 
-    const r = await post('/capture');
-    $('flash').classList.add('go');
-    setTimeout(() => $('flash').classList.remove('go'), 460);
-    if (!r.ok){ $('cue').textContent = 'CAMERA ERROR'; await sleep(3000); break; }
+      const r = await post('/capture');
+      $('flash').classList.add('go');
+      setTimeout(() => $('flash').classList.remove('go'), 460);
+      if (!r.ok){ $('cue').textContent = 'camera error'; await sleep(3000); break shots; }
+
+      $('lastShot').src = '/last.jpg?t=' + Date.now();
+      show('review');
+      const keep = await new Promise(res => { reviewChoice = res; });
+      reviewChoice = null;
+      show('shoot');
+      if (keep) break;
+      await post('/undo');
+    }
 
     pips(n, i + 1);
-    $('shootVeil').style.opacity = 1;
-    if (i < n - 1) await sleep(1400);      // beat between shots — tune this
+    if (i < n - 1) await sleep(700);       // beat between shots — tune this
   }
 
-  $('count').textContent = '';
-  $('cue').textContent = CFG.mock ? 'RENDERING' : 'PRINTING';
+  setCount('');
+  $('cue').textContent = CFG.mock ? 'hatching…' : 'printing…';
 
   try{
     const j = await post('/print', { mode });
     if (!j.ok) throw new Error(j.error || 'print failed');
     $('receipt').src = j.receipt + '?t=' + Date.now();
-    $('doneHdr').textContent = j.mock ? 'SIMULATED RECEIPT' : 'TAKE YOUR RECEIPT';
-    $('doneMock').textContent = j.mock
-      ? `mock mode — no paper — rendered in ${j.seconds}s`
-      : `printed in ${j.seconds}s`;
     show('done');
-    await sleep(j.mock ? 12000 : 8000);
+    await new Promise(res => { returnHome = res; });   // stay until "return"
+    returnHome = null;
   }catch(e){
-    $('cue').textContent = 'SOMETHING WENT WRONG';
+    $('cue').textContent = 'something went wrong';
     await sleep(3500);
   }
 
   show('attract');
   busy = false;
 }
+
+$('keepBtn').addEventListener('click', () => reviewChoice && reviewChoice(true));
+$('retakeBtn').addEventListener('click', () => reviewChoice && reviewChoice(false));
+$('returnBtn').addEventListener('click', () => returnHome && returnHome());
 
 document.addEventListener('click', ev => {
   if (busy) return;
@@ -206,7 +305,6 @@ document.addEventListener('click', ev => {
     return;
   }
   if ($('attract').classList.contains('on')){ show('pick'); return; }
-  if ($('done').classList.contains('on')){ show('attract'); return; }
 });
 </script>
 </body>
