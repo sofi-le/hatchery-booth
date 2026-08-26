@@ -55,6 +55,13 @@ STRIP_FRAME_H, SINGLE_FRAME_H = 402, 670
 # ================================================================
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+
+
+@app.after_request
+def no_cache(r):
+    # kiosk Chromium must never serve a stale UI after a git pull
+    r.headers["Cache-Control"] = "no-store"
+    return r
 RECEIPT_DIR = os.path.join("static", "receipts")
 SAMPLE_DIR  = "samples"
 os.makedirs(RECEIPT_DIR, exist_ok=True)
