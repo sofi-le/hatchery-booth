@@ -101,7 +101,7 @@ if CAMERA_ENABLED:
             while True:
                 arr = np.ascontiguousarray(cam.capture_array("lores"))
                 stream.write(simplejpeg.encode_jpeg(
-                    arr, quality=80, colorspace="BGR"))
+                    arr, quality=80, colorspace="RGB"))
                 time.sleep(1 / 24)
 
         threading.Thread(target=_pi_pump, daemon=True).start()
