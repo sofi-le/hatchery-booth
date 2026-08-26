@@ -101,7 +101,7 @@ if CAMERA_ENABLED:
             while True:
                 arr = np.ascontiguousarray(cam.capture_array("lores"))
                 stream.write(simplejpeg.encode_jpeg(
-                    arr, quality=80, colorspace="RGB"))
+                    arr, quality=80, colorspace="BGR"))
                 time.sleep(1 / 24)
 
         threading.Thread(target=_pi_pump, daemon=True).start()
@@ -164,15 +164,16 @@ def test_pattern(n):
 
 
 def grab_frame():
-    """One 'capture' — real camera, a sample image, or a test pattern."""
+    """One 'capture' — real camera, a sample image, or a test pattern.
+    Camera captures are mirrored to match the mirrored live preview."""
     if CAM_KIND == "picamera":
-        return cam.capture_image("main")
+        return ImageOps.mirror(cam.capture_image("main"))
     if CAM_KIND == "webcam":
         import cv2
         f = _webcam_last["frame"]
         if f is None:
             raise RuntimeError("webcam not ready")
-        return Image.fromarray(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+        return ImageOps.mirror(Image.fromarray(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)))
 
     samples = sorted(glob.glob(os.path.join(SAMPLE_DIR, "*.jpg"))
                      + glob.glob(os.path.join(SAMPLE_DIR, "*.jpeg"))
