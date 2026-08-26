@@ -95,10 +95,14 @@ if CAMERA_ENABLED:
         cam.start_recording(JpegEncoder(q=80), FileOutput(stream), name="lores")
         time.sleep(1.5)
         CAM_KIND = "picamera"
-        # Fixed focus beats autofocus in a booth — AF hunts and misses the moment.
-        # from libcamera import controls
-        # cam.set_controls({"AfMode": controls.AfModeEnum.Manual,
-        #                   "LensPosition": 1/1.2})     # 1.2 metres
+        # Fixed focus beats autofocus in a booth — AF hunts and misses the
+        # moment. Camera Module 3 has an AF motor; lock it at booth distance.
+        try:
+            from libcamera import controls
+            cam.set_controls({"AfMode": controls.AfModeEnum.Manual,
+                              "LensPosition": 1 / 1.2})   # ~1.2 metres
+        except Exception:
+            pass    # camera without an AF motor — nothing to lock
     except ImportError:
         # no picamera2 -> USB / built-in webcam via OpenCV (dev on a laptop)
         try:
