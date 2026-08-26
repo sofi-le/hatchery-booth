@@ -206,9 +206,9 @@ def _font(size, bold=True):
     return ImageFont.load_default()
 
 
-def centered(draw, y, text, font):
+def centered(draw, y, text, font, fill=0):
     box = draw.textbbox((0, 0), text, font=font)
-    draw.text(((WIDTH - box[2]) // 2, y), text, font=font, fill=0)
+    draw.text(((WIDTH - box[2]) // 2, y), text, font=font, fill=fill)
     return y + box[3]
 
 
@@ -241,6 +241,7 @@ def crop_to_aspect(img, target):
 
 
 def process_frame(img, box_w, box_h):
+    """Print pipeline: grayscale, tune, dither to 1-bit."""
     img = ImageOps.exif_transpose(img).convert("L")
     img = crop_to_aspect(img, box_w / box_h)
     img = img.resize((box_w, box_h), Image.LANCZOS)
@@ -251,6 +252,14 @@ def process_frame(img, box_w, box_h):
     img = img.filter(ImageFilter.UnsharpMask(*UNSHARP))
     img = img.point(lambda p: int(255 * (p / 255) ** GAMMA))
     return atkinson(img) if DITHER == "atkinson" else img.convert("1")
+
+
+def process_frame_color(img, box_w, box_h):
+    """Screen pipeline: keep natural colors, just crop and gently polish."""
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    img = crop_to_aspect(img, box_w / box_h)
+    img = img.resize((box_w, box_h), Image.LANCZOS)
+    return ImageOps.autocontrast(img, cutoff=1)
 
 
 def _cute_font(size):
@@ -265,21 +274,28 @@ def _cute_font(size):
     return _font(size)
 
 
-def _logo(size):
-    """1-bit stamp of the Hatchery logo: gold square goes solid black,
-    the white H stays white — crisp on thermal paper."""
+def _logo(size, for_print=True):
+    """The Hatchery logo. Print version is a 1-bit stamp (gold square goes
+    solid black, the white H stays white); screen version keeps its colors."""
     try:
-        img = Image.open(os.path.join("media", "hatchery_logo.png")).convert("L")
+        img = Image.open(os.path.join("media", "hatchery_logo.png"))
     except OSError:
         return None
-    img = img.resize((size, size), Image.LANCZOS)
+    if not for_print:
+        return img.convert("RGB").resize((size, size), Image.LANCZOS)
+    img = img.convert("L").resize((size, size), Image.LANCZOS)
     return img.point(lambda p: 255 if p > 230 else 0).convert("1")
 
 
-def compose_receipt(shots, mode):
-    """Polaroid-style print: caption on top, wide white mat, photo(s), then a
-    chin with the date, a small QR and the logo stamp. Mock render and real
-    print share this."""
+MAROON = (125, 59, 74)
+SOFT_GRAY = (150, 140, 135)
+
+
+def compose_receipt(shots, mode, for_print=False):
+    """Polaroid layout: caption on top, white mat, photo(s), then a chin with
+    the date, logo + handle and the credit line. for_print=True renders the
+    1-bit dithered version for thermal paper; otherwise it's full colour for
+    the screen."""
     n = len(shots)
     border = 38                          # polaroid mat width
     photo_w = WIDTH - 2 * border
@@ -290,7 +306,10 @@ def compose_receipt(shots, mode):
     f_date    = _font(20, bold=False)
     f_handle  = _cute_font(30)
     f_tiny    = _font(15, bold=False)
-    logo      = _logo(46)
+    logo      = _logo(46, for_print)
+
+    ink   = 0 if for_print else MAROON
+    faint = 0 if for_print else SOFT_GRAY
 
     scratch = ImageDraw.Draw(Image.new("1", (WIDTH, 10), 1))
     cap_h    = scratch.textbbox((0, 0), CAPTION, font=f_caption)[3]
@@ -303,22 +322,28 @@ def compose_receipt(shots, mode):
     chin_h = 26 + date_h + 20 + row_h + 10 + tiny_h + 26
     total_h = head_h + n * frame_h + GAP * (n - 1) + chin_h
 
-    canvas = Image.new("1", (WIDTH, total_h), 1)
+    if for_print:
+        canvas = Image.new("1", (WIDTH, total_h), 1)
+    else:
+        canvas = Image.new("RGB", (WIDTH, total_h), (255, 255, 255))
     d = ImageDraw.Draw(canvas)
 
-    centered(d, 26, CAPTION, f_caption)
+    centered(d, 26, CAPTION, f_caption, fill=ink)
 
     y = head_h
     for shot in shots:
-        canvas.paste(process_frame(shot, photo_w, frame_h), (border, y))
-        d.rectangle([border - 1, y - 1, border + photo_w, y + frame_h],
-                    outline=0, width=1)
+        frame = (process_frame if for_print else process_frame_color)(
+            shot, photo_w, frame_h)
+        canvas.paste(frame, (border, y))
+        if for_print:
+            d.rectangle([border - 1, y - 1, border + photo_w, y + frame_h],
+                        outline=0, width=1)
         y += frame_h + GAP
     y -= GAP
 
     y += 26
     y = centered(d, y, datetime.datetime.now().strftime("%b %d, %Y").lower(),
-                 f_date) + 20
+                 f_date, fill=faint) + 20
 
     # logo + handle side by side, centred as one row
     row_gap = 16
@@ -327,17 +352,20 @@ def compose_receipt(shots, mode):
     if logo:
         canvas.paste(logo, (x0, y + (row_h - logo.height) // 2))
         x0 += logo.width + row_gap
-    d.text((x0, y + (row_h - handle_b[3]) // 2), HANDLE, font=f_handle, fill=0)
-    centered(d, y + row_h + 10, CREDIT, f_tiny)
+    d.text((x0, y + (row_h - handle_b[3]) // 2), HANDLE, font=f_handle, fill=ink)
+    centered(d, y + row_h + 10, CREDIT, f_tiny, fill=faint)
 
     return canvas
 
 
-def emit(bitmap):
+def emit(shots, mode):
+    """Save the colour version for the screen; send the dithered 1-bit
+    version to the thermal printer when one is attached."""
     rid = uuid.uuid4().hex[:12]
-    bitmap.save(os.path.join(RECEIPT_DIR, f"{rid}.png"))
+    compose_receipt(shots, mode).save(os.path.join(RECEIPT_DIR, f"{rid}.png"))
     if PRINTER_ENABLED:
         from escpos.printer import Usb
+        bitmap = compose_receipt(shots, mode, for_print=True)
         p = Usb(VENDOR_ID, PRODUCT_ID)
         p.image(bitmap, impl="bitImageRaster")
         p.text("\n\n")
@@ -408,7 +436,7 @@ def do_print():
         mode = request.json.get("mode", "single")
         if not session_shots:
             return jsonify(ok=False, error="no shots"), 400
-        rid = emit(compose_receipt(list(session_shots), mode))
+        rid = emit(list(session_shots), mode)
         session_shots.clear()
         dt = round(time.time() - t0, 1)
         print(f"[{mode}] -> {rid} in {dt}s")
