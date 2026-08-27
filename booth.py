@@ -30,8 +30,8 @@ CAMERA_UPSIDE_DOWN = True      # cable looped backwards -> module mounted 180°
 PRINTER_ENABLED = False        # True once the thermal printer arrives
 WEBCAM_INDEX    = 0            # which webcam to use for the fallback backend
 
-VENDOR_ID   = 0x0483           # from `lsusb` — only used when printing
-PRODUCT_ID  = 0x5743
+PRINTER_PORT = "/dev/serial0"  # CSN-A2-T is TTL serial on the Pi GPIO header
+PRINTER_BAUD = 9600            # printer self-test page shows the real value
 
 PAPER_MM    = 58               # 58 or 80 — which paper roll is loaded
 WIDTH       = {58: 384, 80: 576}[PAPER_MM]   # printable dots @ 203dpi
@@ -382,12 +382,11 @@ def emit(shots, mode):
     rid = uuid.uuid4().hex[:12]
     compose_receipt(shots, mode).save(os.path.join(RECEIPT_DIR, f"{rid}.png"))
     if PRINTER_ENABLED:
-        from escpos.printer import Usb
+        from escpos.printer import Serial
         bitmap = compose_receipt(shots, mode, for_print=True)
-        p = Usb(VENDOR_ID, PRODUCT_ID)
+        p = Serial(PRINTER_PORT, baudrate=PRINTER_BAUD, timeout=5)
         p.image(bitmap, impl="bitImageRaster")
-        p.text("\n\n")
-        p.cut(mode="PART")      # leaves a tab so the receipt hangs in the slot
+        p.text("\n\n\n\n")      # CSN-A2 has no cutter — feed past the tear bar
         p.close()
     return rid
 
