@@ -33,7 +33,8 @@ WEBCAM_INDEX    = 0            # which webcam to use for the fallback backend
 VENDOR_ID   = 0x0483           # from `lsusb` — only used when printing
 PRODUCT_ID  = 0x5743
 
-WIDTH       = 576              # printable dots, 80mm head @ 203dpi
+PAPER_MM    = 58               # 58 or 80 — which paper roll is loaded
+WIDTH       = {58: 384, 80: 576}[PAPER_MM]   # printable dots @ 203dpi
 DITHER      = "atkinson"       # "floyd" (fast) | "atkinson" (better, ~3x slower)
 
 BOOTH_NAME  = "HATCHERY BOOTH"
