@@ -26,6 +26,7 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw, ImageFont
 # ============================ CONFIG ============================
 CAMERA_ENABLED  = True         # picamera2 on the Pi, else any USB/built-in webcam
+CAMERA_UPSIDE_DOWN = True      # cable looped backwards -> module mounted 180°
 PRINTER_ENABLED = False        # True once the thermal printer arrives
 WEBCAM_INDEX    = 0            # which webcam to use for the fallback backend
 
@@ -90,12 +91,17 @@ _webcam_last = {"frame": None}
 if CAMERA_ENABLED:
     try:
         from picamera2 import Picamera2
+        from libcamera import Transform
 
         stream = StreamOutput()
         cam = Picamera2()
+        # 180° rotation at the sensor corrects every stream at once, so the
+        # preview mirror (CSS) and capture mirror (grab_frame) stay untouched
+        flip = Transform(hflip=1, vflip=1) if CAMERA_UPSIDE_DOWN else Transform()
         cam.configure(cam.create_video_configuration(
             main={"size": CAPTURE_SIZE},
             lores={"size": PREVIEW_SIZE, "format": "RGB888"},
+            transform=flip,
         ))
         cam.start()
         time.sleep(1.0)
