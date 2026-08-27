@@ -127,8 +127,12 @@ if CAMERA_ENABLED:
                               "LensPosition": 1 / 1.2})   # ~1.2 metres
         except Exception:
             pass    # camera without an AF motor — nothing to lock
-    except ImportError:
-        # no picamera2 -> USB / built-in webcam via OpenCV (dev on a laptop)
+    except Exception as e:
+        # no picamera2 module, or no camera detected (unseated/backwards
+        # ribbon cable shows up here as an IndexError from Picamera2())
+        if not isinstance(e, ImportError):
+            print("pi camera unavailable:", e)
+        # -> USB / built-in webcam via OpenCV (dev on a laptop)
         try:
             import cv2
             _cap = cv2.VideoCapture(WEBCAM_INDEX)
