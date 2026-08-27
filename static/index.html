@@ -27,7 +27,9 @@
 
   .screen{position:absolute;inset:0;display:none;flex-direction:column;
           align-items:center;justify-content:center}
-  .screen.on{display:flex}
+  .screen.on{display:flex;animation:screenIn .45s ease-out}
+  @keyframes screenIn{from{opacity:0;transform:translateY(1.6vh)}
+                      to{opacity:1;transform:none}}
 
   .fg{position:relative;z-index:2;text-align:center;color:#fff;width:100%}
 
@@ -38,13 +40,12 @@
 
   /* ---- attract ---- */
   #attract{background:var(--butter);justify-content:flex-start}
-  #attract .fg{color:#fff;padding-top:7vh}
-  #attract .badge{display:inline-block;background:#fff;color:var(--bc-red);
-                  border-radius:999px;padding:1.2vmin 3.4vmin;
-                  font-size:2.8vmin;font-weight:800;letter-spacing:.18em;
-                  margin-bottom:4.5vmin}
-  #attract .title{font-family:var(--display);font-size:13vmin;font-weight:400;
-                  letter-spacing:.01em;line-height:1.06;text-transform:uppercase}
+  #attract .fg{color:#fff;padding-top:3vh}
+  #attract .sign{display:block;margin:0 auto;height:36vh;max-width:92vw;
+                 object-fit:contain;
+                 animation:floaty 3.4s ease-in-out infinite}
+  @keyframes floaty{0%,100%{transform:translateY(0)}
+                    50%{transform:translateY(-1.2vh)}}
   #attract .dome{position:absolute;bottom:-16vh;left:50%;
                  transform:translateX(-50%);width:150vw;height:46vh;
                  background:#fff;border-radius:50% 50% 0 0;z-index:2;
@@ -52,26 +53,23 @@
                  padding-top:7vh}
   #attract .tap{font-family:var(--display);color:var(--taupe);font-size:5vmin;
                 font-weight:400;letter-spacing:.04em;text-transform:uppercase;
+                margin-top:12vh;
                 animation:pulse 2.2s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  #attract .eagle{position:absolute;left:50%;bottom:13vh;
+                  transform:translateX(-50%);height:52vh;max-width:94vw;
+                  object-fit:contain;z-index:3;pointer-events:none;
+                  transform-origin:bottom center;
+                  animation:rock 3.4s ease-in-out infinite}
+  @keyframes rock{0%,100%{transform:translateX(-50%) rotate(-1.5deg)}
+                  50%{transform:translateX(-50%) rotate(1.5deg)}}
+  @keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}
+                   50%{opacity:1;transform:scale(1.06)}}
 
   /* ---- mode picker ---- */
-  #pick{background:var(--cream)}
-  #pick h2{font-family:var(--display);font-size:4.4vmin;font-weight:400;
-           letter-spacing:.06em;text-transform:uppercase;margin-bottom:5vmin}
-  .cards{display:flex;gap:5vmin}
-  .card{background:#fff;border:3px solid var(--blush);border-radius:3vmin;
-        padding:5vmin 6vmin;display:flex;flex-direction:column;align-items:center;
-        gap:2.5vmin;box-shadow:0 10px 24px rgba(125,59,74,.10)}
-  .card:active{background:var(--butter-soft);border-color:var(--butter)}
-  .card .name{font-family:var(--display);font-size:4.2vmin;font-weight:400;
-              letter-spacing:.06em;text-transform:uppercase}
-  .card .desc{font-size:2.5vmin;opacity:.55;letter-spacing:.06em}
-  .glyph{display:flex;flex-direction:column;gap:6px}
-  .glyph i{display:block;width:11vmin;background:var(--butter);
-           border:2px solid var(--maroon);border-radius:1vmin}
-  .glyph.s3 i{height:4.2vmin}
-  .glyph.s1 i{height:14.6vmin}
+  #pick{background:#e7cb77 url('/select_screen.png') center/contain no-repeat}
+  #pick .zone{position:absolute;top:0;bottom:0;width:50%}
+  #pick .zone[data-mode="single"]{left:0}
+  #pick .zone[data-mode="strip"]{right:0}
 
   /* ---- session ---- */
   #shoot{background:var(--butter-soft);gap:2.4vmin}
@@ -139,26 +137,15 @@
 
 <div class="screen on" id="attract">
   <div class="fg">
-    <div class="badge">@BC_HATCHERY</div>
-    <div class="title">Hatchery<br>Booth</div>
+    <img class="sign" src="/hatchery_booth_2.png" alt="Hatchery Booth">
   </div>
+  <img class="eagle" src="/eagle_taking_pic.png" alt="">
   <div class="dome"><div class="tap">tap to start</div></div>
 </div>
 
 <div class="screen" id="pick">
-  <h2>pick your style</h2>
-  <div class="cards">
-    <div class="card" data-mode="strip">
-      <div class="glyph s3"><i></i><i></i><i></i></div>
-      <div class="name">strip</div>
-      <div class="desc">3 photos</div>
-    </div>
-    <div class="card" data-mode="single">
-      <div class="glyph s1"><i></i></div>
-      <div class="name">single</div>
-      <div class="desc">1 photo</div>
-    </div>
-  </div>
+  <div class="zone" data-mode="single"></div>
+  <div class="zone" data-mode="strip"></div>
 </div>
 
 <div class="screen" id="shoot">
@@ -293,15 +280,18 @@ async function session(mode){
 
 $('keepBtn').addEventListener('click', () => reviewChoice && reviewChoice(true));
 $('retakeBtn').addEventListener('click', () => reviewChoice && reviewChoice(false));
-$('returnBtn').addEventListener('click', () => returnHome && returnHome());
+$('returnBtn').addEventListener('click', ev => {
+  ev.stopPropagation();               // same tap must not also hit the
+  returnHome && returnHome();         // attract-screen "tap to start" handler
+});
 
 document.addEventListener('click', ev => {
   if (busy) return;
 
-  const card = ev.target.closest('.card');
-  if (card && $('pick').classList.contains('on')){
+  const zone = ev.target.closest('.zone');
+  if (zone && $('pick').classList.contains('on')){
     busy = true;
-    session(card.dataset.mode);
+    session(zone.dataset.mode);
     return;
   }
   if ($('attract').classList.contains('on')){ show('pick'); return; }
