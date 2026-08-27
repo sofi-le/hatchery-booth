@@ -26,7 +26,7 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw, ImageFont
 # ============================ CONFIG ============================
 CAMERA_ENABLED  = True         # picamera2 on the Pi, else any USB/built-in webcam
-CAMERA_UPSIDE_DOWN = True      # cable looped backwards -> module mounted 180°
+CAMERA_UPSIDE_DOWN = False     # True when the cable is looped backwards -> module mounted 180°
 PRINTER_ENABLED = False        # True once the thermal printer arrives
 WEBCAM_INDEX    = 0            # which webcam to use for the fallback backend
 
