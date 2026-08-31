@@ -125,7 +125,7 @@ if CAMERA_ENABLED:
         try:
             from libcamera import controls
             cam.set_controls({"AfMode": controls.AfModeEnum.Manual,
-                              "LensPosition": 1 / 1.0})   # ~1 metre
+                              "LensPosition": 1 / 0.8})   # ~0.8 metres
         except Exception:
             pass    # camera without an AF motor — nothing to lock
     except Exception as e:
