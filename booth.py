@@ -27,11 +27,11 @@ from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw, ImageFont
 # ============================ CONFIG ============================
 CAMERA_ENABLED  = True         # picamera2 on the Pi, else any USB/built-in webcam
 CAMERA_UPSIDE_DOWN = True      # cable looped backwards -> module mounted 180°
-PRINTER_ENABLED = False        # True once the thermal printer arrives
+PRINTER_ENABLED = True         # VRETTI V330M attached over USB
 WEBCAM_INDEX    = 0            # which webcam to use for the fallback backend
 
-VENDOR_ID   = 0x0483           # VRETTI V330M over USB — check with `lsusb`
-PRODUCT_ID  = 0x5743
+VENDOR_ID   = 0x1fc9           # VRETTI V330M over USB, from `lsusb`
+PRODUCT_ID  = 0x2016
 
 PAPER_MM    = 80               # 58 or 80 — which paper roll is loaded
 WIDTH       = {58: 384, 80: 576}[PAPER_MM]   # printable dots @ 203dpi
