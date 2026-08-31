@@ -267,6 +267,9 @@ def process_frame(img, box_w, box_h):
     img = img.filter(ImageFilter.MedianFilter(3))
     img = ImageOps.autocontrast(img, cutoff=2)
     img = ImageEnhance.Contrast(img).enhance(CONTRAST)
+    # big-radius unsharp = local-contrast "clarity" — separates faces
+    # from background far better than edge sharpening alone
+    img = img.filter(ImageFilter.UnsharpMask(16, 35, 2))
     img = img.resize((box_w, box_h), Image.LANCZOS)
     img = img.filter(ImageFilter.UnsharpMask(*UNSHARP))
     img = img.point(lambda p: int(255 * (p / 255) ** GAMMA))
