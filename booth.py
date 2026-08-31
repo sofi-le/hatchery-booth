@@ -387,7 +387,8 @@ def emit(shots, mode):
     compose_receipt(shots, mode).save(os.path.join(RECEIPT_DIR, f"{rid}.png"))
     if PRINTER_ENABLED:
         from escpos.printer import Usb
-        bitmap = compose_receipt(shots, mode, for_print=True)
+        # printer is mounted flipped — rotate so receipts read right-side up
+        bitmap = compose_receipt(shots, mode, for_print=True).rotate(180)
         # TM-T20II: 203dpi/80mm Epson profile, 576px — matches this head;
         # (TM-T88III is 180dpi/512px and rejects our 576px receipts)
         p = Usb(VENDOR_ID, PRODUCT_ID, profile="TM-T20II")
