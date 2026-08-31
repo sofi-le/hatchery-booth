@@ -47,7 +47,7 @@ CAPTURE_SIZE = (2028, 1520)
 PREVIEW_SIZE = (1024, 768)
 
 # image tuning — this is where booth quality lives
-CONTRAST, GAMMA, UNSHARP = 1.15, 0.85, (2, 150, 3)
+CONTRAST, GAMMA, UNSHARP = 1.08, 0.70, (2, 180, 3)
 
 # layout
 MARGIN, GAP = 20, 30
@@ -262,11 +262,12 @@ def process_frame(img, box_w, box_h):
     """Print pipeline: grayscale, tune, dither to 1-bit."""
     img = ImageOps.exif_transpose(img).convert("L")
     img = crop_to_aspect(img, box_w / box_h)
-    img = img.resize((box_w, box_h), Image.LANCZOS)
-    # sensor noise dithers into speckle — smooth it away before enhancing
+    # denoise at 2x — a median filter at final print size eats real detail
+    img = img.resize((box_w * 2, box_h * 2), Image.LANCZOS)
     img = img.filter(ImageFilter.MedianFilter(3))
     img = ImageOps.autocontrast(img, cutoff=2)
     img = ImageEnhance.Contrast(img).enhance(CONTRAST)
+    img = img.resize((box_w, box_h), Image.LANCZOS)
     img = img.filter(ImageFilter.UnsharpMask(*UNSHARP))
     img = img.point(lambda p: int(255 * (p / 255) ** GAMMA))
     return atkinson(img) if DITHER == "atkinson" else img.convert("1")
