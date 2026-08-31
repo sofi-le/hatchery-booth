@@ -384,7 +384,9 @@ def emit(shots, mode):
     if PRINTER_ENABLED:
         from escpos.printer import Usb
         bitmap = compose_receipt(shots, mode, for_print=True)
-        p = Usb(VENDOR_ID, PRODUCT_ID, profile="TM-T88III")
+        # TM-T20II: 203dpi/80mm Epson profile, 576px — matches this head;
+        # (TM-T88III is 180dpi/512px and rejects our 576px receipts)
+        p = Usb(VENDOR_ID, PRODUCT_ID, profile="TM-T20II")
         # small fragments — one tall raster blob overflows the printer's
         # buffer and degenerates into garbage symbols
         p.image(bitmap, impl="bitImageRaster", fragment_height=256)

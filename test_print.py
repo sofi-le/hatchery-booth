@@ -11,10 +11,10 @@ from PIL import Image
 
 impls = sys.argv[1:] or ["graphics", "bitImageColumn", "bitImageRaster"]
 
-# profile: a standard Epson 80mm/576px definition so escpos knows the
-# paper width — the VRETTI has no profile of its own
+# profile: a standard Epson 203dpi/80mm/576px definition so escpos
+# knows the paper width — the VRETTI has no profile of its own
 print("connecting to printer…")
-p = Usb(0x1fc9, 0x2016, profile="TM-T88III")
+p = Usb(0x1fc9, 0x2016, profile="TM-T20II")
 img = Image.new("1", (384, 80), 0)
 
 for impl in impls:
