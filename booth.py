@@ -385,7 +385,9 @@ def emit(shots, mode):
         from escpos.printer import Usb
         bitmap = compose_receipt(shots, mode, for_print=True)
         p = Usb(VENDOR_ID, PRODUCT_ID, profile="TM-T88III")
-        p.image(bitmap, impl="bitImageRaster")
+        # small fragments — one tall raster blob overflows the printer's
+        # buffer and degenerates into garbage symbols
+        p.image(bitmap, impl="bitImageRaster", fragment_height=256)
         p.text("\n\n")
         p.cut(mode="PART")      # V330M auto-cutter, partial cut leaves a tab
         p.close()
