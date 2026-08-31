@@ -30,10 +30,10 @@ CAMERA_UPSIDE_DOWN = True      # cable looped backwards -> module mounted 180°
 PRINTER_ENABLED = False        # True once the thermal printer arrives
 WEBCAM_INDEX    = 0            # which webcam to use for the fallback backend
 
-PRINTER_PORT = "/dev/serial0"  # CSN-A2-T is TTL serial on the Pi GPIO header
-PRINTER_BAUD = 9600            # printer self-test page shows the real value
+VENDOR_ID   = 0x0483           # VRETTI V330M over USB — check with `lsusb`
+PRODUCT_ID  = 0x5743
 
-PAPER_MM    = 58               # 58 or 80 — which paper roll is loaded
+PAPER_MM    = 80               # 58 or 80 — which paper roll is loaded
 WIDTH       = {58: 384, 80: 576}[PAPER_MM]   # printable dots @ 203dpi
 DITHER      = "atkinson"       # "floyd" (fast) | "atkinson" (better, ~3x slower)
 
@@ -382,11 +382,12 @@ def emit(shots, mode):
     rid = uuid.uuid4().hex[:12]
     compose_receipt(shots, mode).save(os.path.join(RECEIPT_DIR, f"{rid}.png"))
     if PRINTER_ENABLED:
-        from escpos.printer import Serial
+        from escpos.printer import Usb
         bitmap = compose_receipt(shots, mode, for_print=True)
-        p = Serial(PRINTER_PORT, baudrate=PRINTER_BAUD, timeout=5)
+        p = Usb(VENDOR_ID, PRODUCT_ID)
         p.image(bitmap, impl="bitImageRaster")
-        p.text("\n\n\n\n")      # CSN-A2 has no cutter — feed past the tear bar
+        p.text("\n\n")
+        p.cut(mode="PART")      # V330M auto-cutter, partial cut leaves a tab
         p.close()
     return rid
 
