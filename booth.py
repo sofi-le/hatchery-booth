@@ -384,7 +384,7 @@ def emit(shots, mode):
     if PRINTER_ENABLED:
         from escpos.printer import Usb
         bitmap = compose_receipt(shots, mode, for_print=True)
-        p = Usb(VENDOR_ID, PRODUCT_ID)
+        p = Usb(VENDOR_ID, PRODUCT_ID, profile="TM-T88III")
         p.image(bitmap, impl="bitImageRaster")
         p.text("\n\n")
         p.cut(mode="PART")      # V330M auto-cutter, partial cut leaves a tab

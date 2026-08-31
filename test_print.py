@@ -8,7 +8,9 @@ solid rectangle under it (no garbage symbols) is the winner.
 from escpos.printer import Usb
 from PIL import Image
 
-p = Usb(0x1fc9, 0x2016)   # VRETTI V330M — keep in sync with booth.py
+# profile: a standard Epson 80mm/576px definition so escpos knows the
+# paper width — the VRETTI has no profile of its own
+p = Usb(0x1fc9, 0x2016, profile="TM-T88III")
 img = Image.new("1", (384, 80), 0)
 
 for impl in ("graphics", "bitImageColumn", "bitImageRaster"):
