@@ -37,6 +37,8 @@ PRODUCT_ID  = 0x2016
 PAPER_MM    = 80               # 58 or 80 — which paper roll is loaded
 WIDTH       = {58: 384, 80: 576}[PAPER_MM]   # printable dots @ 203dpi
 DITHER      = "atkinson"       # "floyd" (fast) | "atkinson" (better, ~3x slower)
+PRINT_CHUNK = 64               # rows sent to the printer at a time
+PRINT_ROWS_PER_S = 500         # pacing; lower it if receipts still glitch
 
 THEME       = os.environ.get("BOOTH_THEME", "walsh203")  # "hatchery" | "walsh203"
 T           = THEMES[THEME]            # UI page + strip text, see themes.py
@@ -396,9 +398,13 @@ def emit(shots, mode):
         # TM-T20II: 203dpi/80mm Epson profile, 576px — matches this head;
         # (TM-T88III is 180dpi/512px and rejects our 576px receipts)
         p = Usb(VENDOR_ID, PRODUCT_ID, profile="TM-T20II")
-        # small fragments — one tall raster blob overflows the printer's
-        # buffer and degenerates into garbage symbols
-        p.image(bitmap, impl="bitImageRaster", fragment_height=256)
+        # small fragments, paced — sent back to back they overflow the
+        # printer's buffer, which drops rows (short, garbled receipts)
+        for top in range(0, bitmap.height, PRINT_CHUNK):
+            chunk = bitmap.crop((0, top, WIDTH,
+                                 min(top + PRINT_CHUNK, bitmap.height)))
+            p.image(chunk, impl="bitImageRaster", fragment_height=PRINT_CHUNK)
+            time.sleep(chunk.height / PRINT_ROWS_PER_S)
         p.text("\n\n")
         p.cut(mode="PART")      # V330M auto-cutter, partial cut leaves a tab
         p.close()
