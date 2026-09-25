@@ -24,6 +24,7 @@ Run:
 import io, os, glob, random, threading, time, uuid, datetime, traceback
 from flask import Flask, request, jsonify, send_from_directory, Response
 from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw, ImageFont
+from themes import THEMES
 # ============================ CONFIG ============================
 CAMERA_ENABLED  = True         # picamera2 on the Pi, else any USB/built-in webcam
 CAMERA_UPSIDE_DOWN = True      # cable looped backwards -> module mounted 180°
@@ -37,11 +38,11 @@ PAPER_MM    = 80               # 58 or 80 — which paper roll is loaded
 WIDTH       = {58: 384, 80: 576}[PAPER_MM]   # printable dots @ 203dpi
 DITHER      = "atkinson"       # "floyd" (fast) | "atkinson" (better, ~3x slower)
 
-BOOTH_NAME  = "HATCHERY BOOTH"
-TAGLINE     = "smile - snap - hatch"
-CAPTION     = "The Hatchery"           # written on the polaroid top
-HANDLE      = "@bc_hatchery"           # next to the logo in the chin
-CREDIT      = "built by @s.ofile !"    # small print under the handle
+THEME       = os.environ.get("BOOTH_THEME", "walsh203")  # "hatchery" | "walsh203"
+T           = THEMES[THEME]            # UI page + strip text, see themes.py
+CAPTION     = T["caption"]             # written on the polaroid top
+HANDLE      = T["handle"]              # next to the logo in the chin
+CREDIT      = T["credit"]              # small print under the handle
 
 CAPTURE_SIZE = (2028, 1520)
 PREVIEW_SIZE = (1024, 768)
@@ -297,10 +298,13 @@ def _cute_font(size):
 
 
 def _logo(size, for_print=True):
-    """The Hatchery logo. Print version is a 1-bit stamp (gold square goes
-    solid black, the white H stays white); screen version keeps its colors."""
+    """The theme's logo, or None. Print version is a 1-bit stamp (light
+    parts stay white, the rest goes solid black); screen version keeps its
+    colors."""
+    if not T["logo"]:
+        return None
     try:
-        img = Image.open(os.path.join("media", "hatchery_logo.png"))
+        img = Image.open(T["logo"])
     except OSError:
         return None
     if not for_print:
@@ -309,7 +313,7 @@ def _logo(size, for_print=True):
     return img.point(lambda p: 255 if p > 230 else 0).convert("1")
 
 
-MAROON = (125, 59, 74)
+MAROON = T["ink"]
 SOFT_GRAY = (150, 140, 135)
 
 
@@ -404,7 +408,7 @@ def emit(shots, mode):
 # ------------------------------------------------------------ routes
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    return send_from_directory("static", T["page"])
 
 
 @app.route("/stream.mjpg")
@@ -477,7 +481,8 @@ def do_print():
 
 if __name__ == "__main__":
     print("Booth |",
-          "camera:", CAM_KIND.upper() if CAM_KIND else "SIMULATED",
+          "theme:", THEME,
+          "| camera:", CAM_KIND.upper() if CAM_KIND else "SIMULATED",
           "| printer:", "REAL" if PRINTER_ENABLED else "MOCK",
           "| dither:", DITHER)
     if not CAMERA_ENABLED:

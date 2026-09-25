@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Walsh203 Booth</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:none}
+  :root{
+    --maroon:#7b1022;       /* BC maroon */
+    --maroon-deep:#4d0914;
+    --red:#951b30;          /* slightly lighter maroon for the centre glow */
+    --blush:#f6dede;        /* pale pink for pressed states */
+  }
+  @font-face{font-family:'Titan One';
+             src:url('/fonts/TitanOne.ttf') format('truetype')}
+  :root{--display:'Titan One',ui-rounded,'Arial Rounded MT Bold',sans-serif}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--maroon);color:#fff;
+       font-family:ui-rounded,'SF Pro Rounded','Hiragino Maru Gothic ProN',
+                   'Arial Rounded MT Bold','Varela Round','Quicksand',sans-serif}
+
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;
+          align-items:center;justify-content:center;
+          background:radial-gradient(ellipse at 50% 35%,var(--red) 0%,
+                                     var(--maroon) 55%,var(--maroon-deep) 100%)}
+  .screen.on{display:flex;animation:screenIn .45s ease-out}
+  @keyframes screenIn{from{opacity:0;transform:translateY(1.6vh)}
+                      to{opacity:1;transform:none}}
+
+  .simbadge{position:absolute;top:1.6vmin;left:0;right:0;z-index:6;
+            text-align:center;font-size:1.8vmin;letter-spacing:.18em;
+            color:#fff;opacity:.4}
+  body:not(.nocam) .simbadge{display:none}
+
+  /* ---- attract ---- */
+  #attract{gap:4vh}
+  #attract .hero{width:min(96vw,82vh);max-height:78vh;object-fit:contain;
+                 transform-origin:bottom center;
+                 filter:drop-shadow(0 2vh 3vh rgba(40,0,0,.35));
+                 animation:rock 3.4s ease-in-out infinite}
+  @keyframes rock{0%,100%{transform:rotate(-1.2deg)}
+                  50%{transform:rotate(1.2deg)}}
+  #attract .tap{font-family:var(--display);color:#fff;font-size:5vmin;
+                letter-spacing:.04em;text-transform:uppercase;
+                animation:pulse 2.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}
+                   50%{opacity:1;transform:scale(1.06)}}
+
+  /* ---- mode picker ---- */
+  #pick{gap:6vh}
+  #pick h1{font-family:var(--display);font-weight:400;font-size:9vmin;
+           letter-spacing:.02em;text-transform:uppercase;
+           text-shadow:0 .8vmin 0 var(--maroon-deep)}
+  #pick .cards{display:flex;gap:4vw;padding:0 4vw;width:100%}
+  #pick .card{flex:1;background:#fff;border-radius:3vmin;padding:3vmin 2.4vmin;
+              display:flex;flex-direction:column;align-items:center;gap:3vmin;
+              box-shadow:0 1.6vh 4vh rgba(40,0,0,.35)}
+  #pick .card .pic{height:34vh;width:100%;display:flex;
+                   align-items:center;justify-content:center}
+  #pick .card .pic img{max-height:100%;max-width:100%;object-fit:contain}
+  #pick .card .photo img{box-shadow:0 .6vh 1.6vh rgba(0,0,0,.18);
+                         transform:rotate(-2deg)}
+  #pick .card .label{font-family:var(--display);color:var(--maroon);
+                     font-size:5.4vmin;text-transform:uppercase}
+  #pick .card .choose{font-family:var(--display);font-size:3vmin;
+                      text-transform:uppercase;letter-spacing:.04em;
+                      background:var(--maroon);color:#fff;border-radius:999px;
+                      padding:1.8vmin 4vmin;white-space:nowrap}
+  /* each half of the screen is tappable, not just the card */
+  #pick .zone{position:absolute;top:0;bottom:0;width:50%;z-index:3}
+  #pick .zone[data-mode="single"]{left:0}
+  #pick .zone[data-mode="strip"]{right:0}
+
+  /* ---- session ---- */
+  #shoot{gap:2.4vmin}
+  /* live preview cropped to the exact print aspect, in a polaroid frame */
+  .pframe{background:#fff;padding:1.6vmin;border-radius:2vmin;
+          box-shadow:0 14px 36px rgba(40,0,0,.35)}
+  .pframe img{display:block;object-fit:cover;transform:scaleX(-1);
+              border-radius:1.2vmin}
+  .pframe.single img{width:min(70vw,42vh);aspect-ratio:4/5}
+  .pframe.strip  img{width:min(80vw,64vh);aspect-ratio:4/3}
+  body.nocam .pframe img{visibility:hidden}
+  #shoot .cue{font-family:var(--display);font-size:3.6vmin;color:#fff;
+              letter-spacing:.1em;text-transform:uppercase;min-height:4.6vmin}
+  #shoot .count{font-family:var(--display);font-size:13vmin;line-height:1;
+                color:#fff;min-height:13vmin}
+  #shoot .count.pop{animation:countpop .5s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes countpop{0%{transform:scale(.3);opacity:0}
+                      100%{transform:scale(1);opacity:1}}
+  #shoot .pips{position:absolute;bottom:5vmin;left:0;right:0;
+               display:flex;gap:16px;justify-content:center}
+  #shoot .pips b{width:2.4vmin;height:2.4vmin;border-radius:50%;
+                 border:2px solid #fff;opacity:.4}
+  #shoot .pips b.done{background:#fff;opacity:1}
+  .flash{position:absolute;inset:0;background:#fff;opacity:0;z-index:5;
+         pointer-events:none}
+  .flash.go{animation:pop .45s ease-out}
+  @keyframes pop{0%{opacity:.95}100%{opacity:0}}
+
+  /* ---- review (keep or retake) ---- */
+  #review{gap:3.5vmin}
+  #review .rtitle{font-family:var(--display);font-size:6vmin;
+                  text-shadow:0 .6vmin 0 var(--maroon-deep)}
+  .polaroid{background:#fff;padding:1.8vmin 1.8vmin 0;border-radius:.9vmin;
+            transform:rotate(-1.5deg);
+            box-shadow:0 14px 36px rgba(40,0,0,.4)}
+  .polaroid img{display:block;object-fit:cover}
+  .polaroid.single img{width:min(70vw,42vh);aspect-ratio:4/5}
+  .polaroid.strip  img{width:min(80vw,56vh);aspect-ratio:4/3}
+  .polaroid .pcap{font-family:var(--display);color:var(--maroon);
+                  text-align:center;font-size:3.8vmin;letter-spacing:.06em;
+                  text-transform:uppercase;padding:2.2vmin 0 2.6vmin}
+  .rbtns{display:flex;gap:4vmin}
+  .btn{font-family:var(--display);font-size:3.4vmin;letter-spacing:.06em;
+       text-transform:uppercase;border-radius:999px;padding:2vmin 6vmin}
+  .btn.ghost{color:#fff;border:3px solid #fff}
+  .btn.ghost:active{background:rgba(255,255,255,.15)}
+  .btn.solid{background:#fff;color:var(--maroon);border:3px solid #fff}
+  .btn.solid:active{background:var(--blush)}
+
+  /* ---- photos ready ---- */
+  #done{gap:2.6vmin}
+  #done .hdr{font-family:var(--display);font-size:4vmin;font-weight:400;
+             letter-spacing:.06em;text-transform:uppercase}
+  .paper{background:#fff;border-radius:2vmin;padding:1.2vmin;
+         box-shadow:0 12px 32px rgba(40,0,0,.35)}
+  .paper img{max-height:74vh;max-width:84vw;display:block;
+             border-radius:1vmin;image-rendering:pixelated}
+</style>
+</head>
+<body>
+
+<div class="flash" id="flash"></div>
+<div class="simbadge">SIMULATED CAMERA</div>
+
+<div class="screen on" id="attract">
+  <img class="hero" src="/walsh203/attract.png" alt="Walsh203">
+  <div class="tap">tap to start</div>
+</div>
+
+<div class="screen" id="pick">
+  <h1>select option</h1>
+  <div class="cards">
+    <div class="card">
+      <div class="pic photo"><img src="/walsh203/photo.png" alt=""></div>
+      <div class="label">photo</div>
+      <div class="choose">choose photo</div>
+    </div>
+    <div class="card">
+      <div class="pic"><img src="/walsh203/strip.png" alt=""></div>
+      <div class="label">strip</div>
+      <div class="choose">choose strip</div>
+    </div>
+  </div>
+  <div class="zone" data-mode="single"></div>
+  <div class="zone" data-mode="strip"></div>
+</div>
+
+<div class="screen" id="shoot">
+  <div class="pframe" id="pframe"><img id="cam" src="/stream.mjpg" alt=""></div>
+  <div class="cue" id="cue"></div>
+  <div class="count" id="count"></div>
+  <div class="pips" id="pips"></div>
+</div>
+
+<div class="screen" id="review">
+  <div class="rtitle">Walsh203</div>
+  <div class="polaroid">
+    <img id="lastShot" alt="">
+    <div class="pcap">love it?</div>
+  </div>
+  <div class="rbtns">
+    <div class="btn ghost" id="retakeBtn">retake</div>
+    <div class="btn solid" id="keepBtn">keep it!</div>
+  </div>
+</div>
+
+<div class="screen" id="done">
+  <div class="hdr">oh man we so touse</div>
+  <div class="paper"><img id="receipt" alt=""></div>
+  <div class="btn solid" id="returnBtn">return</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const show = id => document.querySelectorAll('.screen')
+                     .forEach(s => s.classList.toggle('on', s.id === id));
+const post = (url, body) => fetch(url, {
+  method:'POST', headers:{'Content-Type':'application/json'},
+  body: JSON.stringify(body || {})
+}).then(r => r.json());
+
+let CFG = {strip_shots: 3, mock: true, camera: false};
+let busy = false;
+let reviewChoice = null;
+let returnHome = null;
+
+fetch('/config').then(r => r.json()).then(c => {
+  CFG = c;
+  document.body.classList.toggle('nocam', !c.camera);
+}).catch(() => document.body.classList.add('nocam'));
+
+// dev helper: /?screen=review jumps straight to a screen for styling
+const dbgScreen = new URLSearchParams(location.search).get('screen');
+if (dbgScreen){
+  if (dbgScreen === 'review'){
+    $('lastShot').src = '/last.jpg';
+    document.querySelector('.polaroid').classList.add(
+      new URLSearchParams(location.search).get('mode') || 'single');
+  }
+  if (dbgScreen === 'done') $('receipt').src = '/receipts/bc522081c1e6.png';
+  if (dbgScreen === 'shoot'){
+    $('pframe').classList.add(
+      new URLSearchParams(location.search).get('mode') || 'single');
+    setCount(2); $('cue').textContent = 'get ready!'; pips(3, 1);
+  }
+  show(dbgScreen);
+}
+
+function pips(n, done){
+  $('pips').innerHTML = Array.from({length:n},
+    (_, i) => `<b class="${i < done ? 'done' : ''}"></b>`).join('');
+}
+
+function setCount(t){
+  const c = $('count');
+  c.textContent = t;
+  if (t !== ''){ c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); }
+}
+
+async function session(mode){
+  const n = mode === 'strip' ? CFG.strip_shots : 1;
+  await post('/reset');
+  const aspect = mode === 'strip' ? 'strip' : 'single';
+  $('pframe').className = 'pframe ' + aspect;
+  document.querySelector('.polaroid').className = 'polaroid ' + aspect;
+  show('shoot');
+  pips(n, 0);
+
+  shots: for (let i = 0; i < n; i++){
+    while (true){
+      if (n > 1){ $('cue').textContent = `photo ${i+1} of ${n}`; await sleep(900); }
+      for (let k = 3; k > 0; k--){
+        setCount(k);
+        $('cue').textContent = k === 3 ? 'get ready!' : '';
+        await sleep(1000);
+      }
+      setCount(''); $('cue').textContent = '';
+      await sleep(120);
+
+      const r = await post('/capture');
+      $('flash').classList.add('go');
+      setTimeout(() => $('flash').classList.remove('go'), 460);
+      if (!r.ok){ $('cue').textContent = 'camera error'; await sleep(3000); break shots; }
+
+      $('lastShot').src = '/last.jpg?t=' + Date.now();
+      show('review');
+      const keep = await new Promise(res => { reviewChoice = res; });
+      reviewChoice = null;
+      show('shoot');
+      if (keep) break;
+      await post('/undo');
+    }
+
+    pips(n, i + 1);
+    if (i < n - 1) await sleep(700);       // beat between shots — tune this
+  }
+
+  setCount('');
+  $('cue').textContent = CFG.mock ? 'developing…' : 'printing…';
+
+  try{
+    const j = await post('/print', { mode });
+    if (!j.ok) throw new Error(j.error || 'print failed');
+    $('receipt').src = j.receipt + '?t=' + Date.now();
+    show('done');
+    await new Promise(res => { returnHome = res; });   // stay until "return"
+    returnHome = null;
+  }catch(e){
+    $('cue').textContent = 'something went wrong';
+    await sleep(3500);
+  }
+
+  show('attract');
+  busy = false;
+}
+
+$('keepBtn').addEventListener('click', () => reviewChoice && reviewChoice(true));
+$('retakeBtn').addEventListener('click', () => reviewChoice && reviewChoice(false));
+$('returnBtn').addEventListener('click', ev => {
+  ev.stopPropagation();               // same tap must not also hit the
+  returnHome && returnHome();         // attract-screen "tap to start" handler
+});
+
+document.addEventListener('click', ev => {
+  if (busy) return;
+
+  const zone = ev.target.closest('.zone');
+  if (zone && $('pick').classList.contains('on')){
+    busy = true;
+    session(zone.dataset.mode);
+    return;
+  }
+  if ($('attract').classList.contains('on')){ show('pick'); return; }
+});
+</script>
+</body>
+</html>
